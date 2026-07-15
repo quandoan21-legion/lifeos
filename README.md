@@ -1,84 +1,103 @@
-Tạo file `README.md` ban đầu như này là hợp lý. Mình viết theo hướng GitHub landing page, đủ để sau này mentor hoặc người khác vào repo hiểu ngay vision.
-
-```markdown
 # LifeOS
 
 > An Obsidian-first Personal Operating System for collecting, analyzing, and reflecting on personal data.
 
 ## Overview
 
-LifeOS is a personal analytics platform designed to unify data from different areas of life into a single system.
+LifeOS is a self-hosted personal analytics platform designed to unify different areas of life into a single system.
 
-Modern life data is distributed across many different applications:
+Modern personal data is fragmented across many applications:
 
 - Reading activity in KOReader.
-- Coding activity in Git/GitHub.
-- Schedule and events in Google Calendar.
+- Coding activity from Git and GitHub.
+- Calendar and schedule data.
 - Knowledge management in Obsidian.
-- Fitness, habits, and personal metrics in separate applications.
+- Fitness, habits, and personal metrics from different applications.
 
-Each tool solves a specific problem well, but there is no system that helps provide a complete picture of personal growth over time.
+Each application solves a specific problem, but there is no unified system that helps understand personal growth over time.
 
-LifeOS aims to become a personal operating system that helps answer questions such as:
+LifeOS aims to answer questions such as:
 
 - How much time did I spend learning this month?
 - How many hours did I read?
-- How consistent was my workout routine?
-- How do different activities affect my productivity?
+- How consistent was my training?
+- What activities improve my productivity?
 - What patterns can I discover about myself?
 
 ---
 
 # Philosophy
 
-LifeOS does not try to replace existing applications.
+LifeOS does not replace existing applications.
 
-Instead, it acts as an integration and analytics layer between them.
+Instead, it works as a personal data integration and analytics layer.
 
-The core idea:
+The core workflow:
 
 ```
-
 Collect → Normalize → Store → Analyze → Reflect
-
 ```
 
-- **Collect** data from different sources.
-- **Normalize** different formats into a common model.
-- **Store** structured data for analysis.
-- **Analyze** personal patterns and trends.
-- **Reflect** through reports, dashboards, and reviews.
+### Collect
+
+Gather data from different sources.
+
+Examples:
+
+- KOReader reading sessions.
+- GitHub activity.
+- Calendar events.
+- Fitness data.
+
+### Normalize
+
+Convert different data formats into a common event model.
+
+### Store
+
+Keep structured data for analytics while preserving human-readable records.
+
+### Analyze
+
+Generate statistics, trends, and personal insights.
+
+### Reflect
+
+Present information through dashboards, reports, and reviews.
 
 ---
 
 # Design Principles
 
-## 1. Data Ownership
+## Data Ownership
 
 Personal data should belong to the user.
 
-LifeOS follows a data ownership principle:
+LifeOS follows these principles:
 
-- Human-readable data remains in open formats.
-- Notes and personal records are stored as Markdown.
-- Data should be portable and easy to backup.
+- Open formats whenever possible.
+- Human-readable storage.
+- Easy backup and migration.
+- Self-hosted infrastructure.
 
-Obsidian Vault acts as the human-readable source of truth.
+The user owns the data.
 
 ---
 
-## 2. Obsidian-first
+## Obsidian-first
 
-Instead of creating another standalone productivity application, LifeOS uses Obsidian as the main user interface.
+LifeOS uses Obsidian as the primary interface for personal knowledge and reflection.
+
+Instead of building another closed productivity application, LifeOS integrates into an existing workflow.
 
 Benefits:
 
-- Existing workflow.
 - Markdown-based storage.
-- Offline capability.
-- Extensible through plugins.
+- Offline-first experience.
+- Portable data.
+- Extensible ecosystem.
 
-Users interact with LifeOS through their existing Obsidian workflow:
+Examples:
 
 - Daily notes.
 - Habit tracking.
@@ -88,56 +107,52 @@ Users interact with LifeOS through their existing Obsidian workflow:
 
 ---
 
-## 3. Extensible Architecture
+## Modular Architecture
 
-LifeOS is designed around connectors.
+LifeOS is built around independent connectors.
 
-Adding a new data source should only require creating a new connector without changing the entire system.
+Adding a new data source should only require implementing a new connector.
 
-Future integrations may include:
+Future integrations:
 
+- KOReader
+- GitHub
 - Garmin
 - Strava
-- WakaTime
+- Calendar
 - Other personal data sources
 
 ---
 
 # Architecture
 
-High-level architecture:
+High-level system design:
 
 ```
+                    Data Sources
 
-```
-                Data Sources
+        KOReader     GitHub     Calendar     Fitness
+            |           |           |            |
+            +-----------+-----------+------------+
 
-    KOReader     GitHub     Calendar
-        |           |           |
-        +-----------+-----------+
+                         |
+                    Connectors
 
-                Connectors
+                         |
 
-                     |
+                  LifeOS Backend
 
-              LifeOS Backend
+              +-------------------+
+              |                   |
+              |                   |
+        Analytics Database    Obsidian Vault
+              |                   |
+              |                   |
+       Analytics Engine    Obsidian Plugin
 
-          +--------------------+
-          |                    |
-          |                    |
-    Analytics Database    Obsidian Vault
-          |                    |
-          |              Obsidian Plugin
-          |
-    Analytics Engine
+                         |
 
-                     |
-                Syncthing
-
-                     |
-             Personal Devices
-```
-
+                  Personal Devices
 ```
 
 ---
@@ -146,43 +161,51 @@ High-level architecture:
 
 ## Connectors
 
-Responsible for collecting data from external sources.
+Connectors collect data from external applications.
+
+Responsibilities:
+
+- Authenticate with external services.
+- Fetch raw data.
+- Convert data into LifeOS events.
+- Send data to the backend.
 
 Examples:
 
-- KOReader connector
-- GitHub connector
-- Calendar connector
-
-Each connector is independent and follows a common data model.
+- KOReader connector.
+- GitHub connector.
+- Calendar connector.
 
 ---
 
 ## LifeOS Backend
 
-The backend acts as the central processing layer.
+The backend is the central processing layer.
 
 Responsibilities:
 
-- Receive data from connectors.
-- Normalize different data formats.
+- Receive incoming data.
+- Normalize events.
 - Provide APIs.
-- Handle application logic.
+- Manage business logic.
 - Generate analytics.
 
 ---
 
 ## Storage Layer
 
-LifeOS separates data into two layers.
+LifeOS separates human-readable data and machine-readable data.
 
 ### Human Layer
 
-Obsidian Vault:
+**Obsidian Vault**
 
-- Markdown files.
-- Daily notes.
-- Personal documentation.
+Stores:
+
+- Markdown notes.
+- Personal records.
+- Reflections.
+- Daily logs.
 
 Purpose:
 
@@ -190,19 +213,25 @@ Purpose:
 - Portable.
 - User-owned.
 
+---
+
 ### Machine Layer
 
-Analytics Database:
+**Analytics Database**
 
-- Structured events.
-- Aggregated metrics.
-- Analytical data.
+Stores:
+
+- Events.
+- Metrics.
+- Aggregations.
+- Historical data.
 
 Purpose:
 
-- Fast querying.
+- Fast queries.
+- Analytics.
 - Reports.
-- Insights.
+- Dashboards.
 
 ---
 
@@ -210,24 +239,34 @@ Purpose:
 
 ## Personal Tracking
 
-- Daily logs.
+- Daily journal.
 - Habit tracking.
 - Workout tracking.
 - Weight tracking.
+- Personal metrics.
+
+---
 
 ## Reading Analytics
 
 - KOReader integration.
-- Reading sessions.
+- Reading session tracking.
 - Reading statistics.
+- Reading history.
+
+---
 
 ## Coding Analytics
 
-- Git/GitHub integration.
-- Coding activity tracking.
+- Git integration.
+- GitHub activity tracking.
+- Coding statistics.
 
-## Reviews
+---
 
+## Personal Reviews
+
+- Daily reflection.
 - Weekly review.
 - Monthly review.
 - Personal analytics dashboard.
@@ -236,30 +275,38 @@ Purpose:
 
 # Roadmap
 
-## Phase 1 - Foundation
+## Phase 1 — Foundation
 
-- Design data model.
+- Define LifeOS data model.
 - Build backend service.
 - Setup database.
 - Docker deployment.
 - Basic API.
 
-## Phase 2 - Obsidian Integration
+---
+
+## Phase 2 — Obsidian Integration
 
 - Obsidian plugin.
 - Daily dashboard.
-- Manual logging.
+- Manual data entry.
 - Habit tracking.
 
-## Phase 3 - Data Connectors
+---
+
+## Phase 3 — Data Connectors
 
 - KOReader connector.
 - Reading analytics.
 - GitHub connector.
+- Calendar connector.
 
-## Phase 4 - Personal Analytics
+---
 
-- Weekly/monthly reports.
+## Phase 4 — Personal Analytics
+
+- Weekly reports.
+- Monthly reports.
 - Productivity analysis.
 - Personal insights.
 
@@ -271,10 +318,10 @@ Purpose:
 
 ---
 
-# Goal
+# Long-term Goal
 
-LifeOS is not just a tracker.
+LifeOS is not just a tracking application.
 
-The long-term goal is to build a personal operating system that helps understand, analyze, and improve the way we learn, work, and grow over time.
+The goal is to build a personal operating system that helps people understand, analyze, and improve the way they learn, work, and grow over time.
+
 ```
-
