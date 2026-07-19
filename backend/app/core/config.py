@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     version: str = "0.1.0"
     debug: bool = True
 
+    DATABASE_URL: str
+    LOG_LEVEL: str = "INFO"
+
     class Config:
         env_file = ".env"
 
