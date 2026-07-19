@@ -1,14 +1,12 @@
 from fastapi import FastAPI
 
+from app.api.v1.router import router
+from app.core.config import settings
 
 app = FastAPI(
-    title="LifeOS API",
-    version="0.1.0"
+    title=settings.app_name,
+    version=settings.version,
+    debug=settings.debug,
 )
 
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "ok"
-    }
+app.include_router(router, prefix="/api/v1")
