@@ -14,9 +14,27 @@ dependencies = [
 members = [
     "backend",
 ]
+[tool.ruff]
+line-length = 88
+target-version = "py312"
 
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+]
+
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
     "pytest-cov>=7.1.0",
+    "ruff>=0.15.22",
 ]
