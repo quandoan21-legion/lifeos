@@ -34,6 +34,7 @@ quote-style = "double"
 indent-style = "space"
 [dependency-groups]
 dev = [
+    "pre-commit>=4.3.0",
     "pytest>=8.4.2",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.22",
