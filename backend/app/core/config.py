@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     LOG_LEVEL: str = "INFO"
 
+    SECRET_KEY: str = "dev-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
     db_pool_size: int = 5
     db_max_overflow: int = 10
     db_pool_recycle: int = 300
