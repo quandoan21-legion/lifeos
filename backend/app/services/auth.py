@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
@@ -22,7 +22,7 @@ def _create_token(
     expires_delta: timedelta,
     token_type: str,
 ) -> tuple[str, datetime]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + expires_delta
     payload = {
         "sub": str(user_id),

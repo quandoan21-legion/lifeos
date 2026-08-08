@@ -1,11 +1,8 @@
-from collections.abc import AsyncGenerator
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.config import settings
 from app.database.connection import async_engine, engine
 
 AsyncSessionLocal = async_sessionmaker(
