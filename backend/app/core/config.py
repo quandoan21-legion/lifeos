@@ -1,4 +1,10 @@
-from pydantic_settings import BaseSettings
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Walk up from this file to find the project root containing .env
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_ENV_FILE = _PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -19,8 +25,7 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 300
     db_echo: bool = False
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), extra="ignore")
 
     @property
     def async_database_url(self) -> str:
