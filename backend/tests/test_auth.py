@@ -1,74 +1,32 @@
 import pytest
 
+from app.models.user import User
+from app.services.auth import hash_password
 
-@pytest.mark.asyncio
-class TestRegister:
-    async def test_register_success(self, client):
-        response = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "test@example.com",
-                "password": "securepassword123",
-                "full_name": "Test User",
-            },
-        )
-        assert response.status_code == 201
-        data = response.json()
-        assert data["email"] == "test@example.com"
-        assert data["full_name"] == "Test User"
-        assert data["is_active"] is True
-        assert "id" in data
+TEST_EMAIL = "test@example.com"
+TEST_PASSWORD = "securepassword123"
+TEST_NAME = "Test User"
 
-    async def test_register_duplicate_email(self, client):
-        payload = {
-            "email": "dup@example.com",
-            "password": "securepassword123",
-            "full_name": "Dup User",
-        }
-        await client.post("/api/v1/auth/register", json=payload)
-        response = await client.post("/api/v1/auth/register", json=payload)
-        assert response.status_code == 409
 
-    async def test_register_short_password(self, client):
-        response = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "short@example.com",
-                "password": "short",
-                "full_name": "Short",
-            },
-        )
-        assert response.status_code == 422
-
-    async def test_register_invalid_email(self, client):
-        response = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "not-an-email",
-                "password": "securepassword123",
-                "full_name": "Bad Email",
-            },
-        )
-        assert response.status_code == 422
+async def _create_user(db_session) -> User:
+    user = User(
+        email=TEST_EMAIL,
+        hashed_password=hash_password(TEST_PASSWORD),
+        full_name=TEST_NAME,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
 
 
 @pytest.mark.asyncio
 class TestLogin:
-    async def test_login_success(self, client):
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "login@example.com",
-                "password": "securepassword123",
-                "full_name": "Login User",
-            },
-        )
+    async def test_login_success(self, client, db_session):
+        await _create_user(db_session)
         response = await client.post(
             "/api/v1/auth/login",
-            json={
-                "email": "login@example.com",
-                "password": "securepassword123",
-            },
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
         assert response.status_code == 200
         data = response.json()
@@ -77,49 +35,29 @@ class TestLogin:
         assert data["token_type"] == "bearer"
         assert "expires_at" in data
 
-    async def test_login_wrong_password(self, client):
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "wrong@example.com",
-                "password": "securepassword123",
-                "full_name": "Wrong User",
-            },
-        )
+    async def test_login_wrong_password(self, client, db_session):
+        await _create_user(db_session)
         response = await client.post(
             "/api/v1/auth/login",
-            json={
-                "email": "wrong@example.com",
-                "password": "wrongpassword",
-            },
+            json={"email": TEST_EMAIL, "password": "wrongpassword"},
         )
         assert response.status_code == 401
 
     async def test_login_nonexistent_user(self, client):
         response = await client.post(
             "/api/v1/auth/login",
-            json={
-                "email": "nobody@example.com",
-                "password": "securepassword123",
-            },
+            json={"email": "nobody@example.com", "password": TEST_PASSWORD},
         )
         assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 class TestMe:
-    async def test_me_with_valid_token(self, client):
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "me@example.com",
-                "password": "securepassword123",
-                "full_name": "Me User",
-            },
-        )
+    async def test_me_with_valid_token(self, client, db_session):
+        await _create_user(db_session)
         login_resp = await client.post(
             "/api/v1/auth/login",
-            json={"email": "me@example.com", "password": "securepassword123"},
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
         token = login_resp.json()["access_token"]
 
@@ -129,7 +67,7 @@ class TestMe:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["email"] == "me@example.com"
+        assert data["email"] == TEST_EMAIL
 
     async def test_me_without_token(self, client):
         response = await client.get("/api/v1/auth/me")
@@ -142,18 +80,11 @@ class TestMe:
         )
         assert response.status_code == 401
 
-    async def test_me_with_refresh_token_rejected(self, client):
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "refresh@example.com",
-                "password": "securepassword123",
-                "full_name": "Refresh User",
-            },
-        )
+    async def test_me_with_refresh_token_rejected(self, client, db_session):
+        await _create_user(db_session)
         login_resp = await client.post(
             "/api/v1/auth/login",
-            json={"email": "refresh@example.com", "password": "securepassword123"},
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
         refresh_token = login_resp.json()["refresh_token"]
 
@@ -166,18 +97,11 @@ class TestMe:
 
 @pytest.mark.asyncio
 class TestRefresh:
-    async def test_refresh_success(self, client):
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "refresh2@example.com",
-                "password": "securepassword123",
-                "full_name": "Refresh2 User",
-            },
-        )
+    async def test_refresh_success(self, client, db_session):
+        await _create_user(db_session)
         login_resp = await client.post(
             "/api/v1/auth/login",
-            json={"email": "refresh2@example.com", "password": "securepassword123"},
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
         refresh_token = login_resp.json()["refresh_token"]
 
@@ -190,18 +114,11 @@ class TestRefresh:
         assert "access_token" in data
         assert "refresh_token" in data
 
-    async def test_refresh_with_access_token_rejected(self, client):
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "access@example.com",
-                "password": "securepassword123",
-                "full_name": "Access User",
-            },
-        )
+    async def test_refresh_with_access_token_rejected(self, client, db_session):
+        await _create_user(db_session)
         login_resp = await client.post(
             "/api/v1/auth/login",
-            json={"email": "access@example.com", "password": "securepassword123"},
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
         access_token = login_resp.json()["access_token"]
 

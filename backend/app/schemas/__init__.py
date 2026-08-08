@@ -1,7 +1,6 @@
 from app.schemas.auth import (
     RefreshTokenRequest,
     TokenResponse,
-    UserCreate,
     UserLogin,
     UserOut,
 )
@@ -9,7 +8,6 @@ from app.schemas.auth import (
 __all__ = [
     "RefreshTokenRequest",
     "TokenResponse",
-    "UserCreate",
     "UserLogin",
     "UserOut",
 ]

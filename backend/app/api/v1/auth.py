@@ -3,7 +3,6 @@ from uuid import UUID
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -12,7 +11,6 @@ from app.models.user import User
 from app.schemas.auth import (
     RefreshTokenRequest,
     TokenResponse,
-    UserCreate,
     UserLogin,
     UserOut,
 )
@@ -20,41 +18,10 @@ from app.services.auth import (
     create_access_token,
     create_refresh_token,
     decode_token,
-    hash_password,
     verify_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def register(
-    user_in: UserCreate,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    existing = await db.execute(select(User).where(User.email == user_in.email))
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
-        )
-
-    user = User(
-        email=user_in.email,
-        hashed_password=hash_password(user_in.password),
-        full_name=user_in.full_name,
-    )
-    db.add(user)
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
-        ) from None
-    await db.refresh(user)
-    return user
 
 
 @router.post("/login", response_model=TokenResponse)
