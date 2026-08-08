@@ -4,7 +4,7 @@ from app.api.middleware.logging import log_requests
 from app.api.v1.router import router
 from app.core.config import settings
 from app.core.logging import logger
-from app.database.connection import check_database_connection
+from app.database.connection import check_database_connection_async
 
 app = FastAPI(
     title=settings.app_name,
@@ -20,6 +20,6 @@ app.include_router(router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():
-    if not check_database_connection():
+    if not await check_database_connection_async():
         raise RuntimeError("Cannot connect to database")
     logger.info("LifeOS API started")
