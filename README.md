@@ -314,7 +314,118 @@ Purpose:
 
 # Current Status
 
-🚧 Planning and architecture phase.
+Phase 1 — Foundation is in progress. The backend service is implemented with JWT-based authentication (issue #27 complete).
+
+## What works
+
+- User model with email, hashed password, full name, and active flag
+- Password hashing with bcrypt
+- JWT access tokens (30 min) and refresh tokens (7 days)
+- `POST /api/v1/auth/login` — login, returns access + refresh token
+- `POST /api/v1/auth/refresh` — exchange a refresh token for a new token pair
+- `GET /api/v1/auth/me` — return the current authenticated user
+- Protected endpoints require a valid Bearer access token
+- Unit tests (10/10 passing)
+
+---
+
+# Getting Started
+
+## Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (Astral's Python package manager)
+- PostgreSQL database (or a Supabase project)
+
+## Configuration
+
+The backend reads configuration from a `.env` file at the project root. Required variables:
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql+psycopg://user:password@host:5432/dbname` |
+| `SECRET_KEY` | Secret used to sign JWT tokens. Change this in production. |
+
+Optional variables (with defaults):
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | 30 | Access token lifetime |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | 7 | Refresh token lifetime |
+| `JWT_ALGORITHM` | HS256 | JWT signing algorithm |
+| `LOG_LEVEL` | INFO | Application log level |
+
+## Running the backend locally
+
+```bash
+cd backend
+uv sync
+uv run uvicorn app.main:app --reload
+```
+
+The API starts on `http://localhost:8000`. Interactive docs are available at `http://localhost:8000/docs`.
+
+## Running with Docker
+
+```bash
+cd backend
+docker compose up --build
+```
+
+The API starts on `http://localhost:8000`.
+
+## Creating a user
+
+There is no public registration endpoint. Create users with the CLI tool:
+
+```bash
+cd backend
+uv run python -m app.cli.create_user
+```
+
+You will be prompted for an email, password (min 8 characters), and full name.
+
+## Running tests
+
+```bash
+cd backend
+uv run pytest -v
+```
+
+## API endpoints
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/api/v1/health` | No | Health check |
+| POST | `/api/v1/auth/login` | No | Login, returns token pair |
+| POST | `/api/v1/auth/refresh` | No | Refresh access token |
+| GET | `/api/v1/auth/me` | Yes | Get current user |
+
+### Example: login
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "securepassword123"}'
+```
+
+Response:
+
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer",
+  "expires_at": "2026-08-18T12:30:00Z"
+}
+```
+
+### Example: get current user
+
+```bash
+curl http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer <access_token>"
+```
 
 ---
 
