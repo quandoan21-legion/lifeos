@@ -1,0 +1,20 @@
+{
+  "obsidian": {
+    "template_folder": "Templates",
+    "daily_notes": {
+      "folder": "Daily",
+      "template": "Daily Note.md",
+      "format": "YYYY-MM-DD"
+    },
+    "weekly_notes": {
+      "folder": "Weekly",
+      "template": "Weekly Review.md",
+      "format": "YYYY-[W]ww"
+    },
+    "monthly_notes": {
+      "folder": "Monthly",
+      "template": "Monthly Review.md",
+      "format": "YYYY-MM"
+    }
+  }
+}
