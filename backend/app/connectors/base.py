@@ -19,18 +19,18 @@ class BaseConnector(ABC):
         ...
 
     @abstractmethod
-    def normalize(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Convert one raw record into a normalized record dict.
+    def normalize(self, raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Convert raw records into normalized record dicts.
 
-        Returns a dict with keys: record_type, occurred_at, payload.
-        record_type is "activity", "event", or "metric".
+        Each returned dict has keys: record_type, occurred_at, and
+        type-specific fields. record_type is "activity", "event", or "metric".
         """
         ...
 
     async def run(
         self, since: datetime | None = None
     ) -> list[dict[str, Any]]:
-        """Full pipeline: authenticate -> fetch_raw -> normalize each record."""
+        """Full pipeline: authenticate -> fetch_raw -> normalize."""
         await self.authenticate()
         raw_records = await self.fetch_raw(since)
-        return [self.normalize(r) for r in raw_records]
+        return self.normalize(raw_records)

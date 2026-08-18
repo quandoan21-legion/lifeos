@@ -69,18 +69,21 @@ class GitHubConnector(BaseConnector):
             ]
         return events
 
-    def normalize(self, raw: dict[str, Any]) -> dict[str, Any]:
-        payload = raw.get("payload", {})
-        return {
-            "record_type": "event",
-            "source": self.source,
-            "event_type": _map_event_type(raw["type"]),
-            "occurred_at": _parse_github_timestamp(raw["created_at"]),
-            "metadata": {
-                "repo": raw.get("repo", {}).get("name"),
-                "action": payload.get("action"),
-                "size": payload.get("size"),
-                "ref": payload.get("ref"),
-                "github_id": raw.get("id"),
-            },
-        }
+    def normalize(self, raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for event in raw:
+            payload = event.get("payload", {})
+            results.append({
+                "record_type": "event",
+                "source": self.source,
+                "event_type": _map_event_type(event["type"]),
+                "occurred_at": _parse_github_timestamp(event["created_at"]),
+                "metadata": {
+                    "repo": event.get("repo", {}).get("name"),
+                    "action": payload.get("action"),
+                    "size": payload.get("size"),
+                    "ref": payload.get("ref"),
+                    "github_id": event.get("id"),
+                },
+            })
+        return results
