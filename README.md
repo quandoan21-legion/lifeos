@@ -113,10 +113,13 @@ LifeOS is built around independent connectors.
 
 Adding a new data source should only require implementing a new connector.
 
+Current integrations:
+
+- KOReader (reading sessions)
+- GitHub (coding activity)
+
 Future integrations:
 
-- KOReader
-- GitHub
 - Garmin
 - Strava
 - Calendar
@@ -170,11 +173,10 @@ Responsibilities:
 - Convert data into LifeOS events.
 - Send data to the backend.
 
-Examples:
+Current connectors:
 
-- KOReader connector.
-- GitHub connector.
-- Calendar connector.
+- **KOReader connector** — reads `statistics.sqlite3` from a local filesystem path, groups page turns into reading sessions, and pushes them to the ingestion API.
+- **GitHub connector** — fetches recent public activity from the GitHub Events API and normalizes it into LifeOS events.
 
 ---
 
@@ -217,106 +219,25 @@ Purpose:
 
 ### Machine Layer
 
-**Analytics Database**
+**Analytics Database (Supabase / PostgreSQL)**
 
-Stores:
+Three tables power the connector system:
 
-- Events.
-- Metrics.
-- Aggregations.
-- Historical data.
+| Table | Purpose | Example records |
+| --- | --- | --- |
+| `activities` | Duration-based records | Reading sessions, workouts, coding sessions |
+| `events` | Point-in-time records | Commits, pull requests, book finished |
+| `metrics` | Measurable values | Weight, pages read, habit count |
 
-Purpose:
-
-- Fast queries.
-- Analytics.
-- Reports.
-- Dashboards.
-
----
-
-# Planned Features
-
-## Personal Tracking
-
-- Daily journal.
-- Habit tracking.
-- Workout tracking.
-- Weight tracking.
-- Personal metrics.
-
----
-
-## Reading Analytics
-
-- KOReader integration.
-- Reading session tracking.
-- Reading statistics.
-- Reading history.
-
----
-
-## Coding Analytics
-
-- Git integration.
-- GitHub activity tracking.
-- Coding statistics.
-
----
-
-## Personal Reviews
-
-- Daily reflection.
-- Weekly review.
-- Monthly review.
-- Personal analytics dashboard.
-
----
-
-# Roadmap
-
-## Phase 1 — Foundation
-
-- Define LifeOS data model.
-- Build backend service.
-- Setup database.
-- Docker deployment.
-- Basic API.
-
----
-
-## Phase 2 — Obsidian Integration
-
-- Obsidian plugin.
-- Daily dashboard.
-- Manual data entry.
-- Habit tracking.
-
----
-
-## Phase 3 — Data Connectors
-
-- KOReader connector.
-- Reading analytics.
-- GitHub connector.
-- Calendar connector.
-
----
-
-## Phase 4 — Personal Analytics
-
-- Weekly reports.
-- Monthly reports.
-- Productivity analysis.
-- Personal insights.
+All tables are owner-scoped via Row Level Security — each user can only see and modify their own data.
 
 ---
 
 # Current Status
 
-Phase 1 — Foundation is in progress. The backend service is implemented with JWT-based authentication (issue #27 complete).
-
 ## What works
+
+### Authentication (Phase 1)
 
 - User model with email, hashed password, full name, and active flag
 - Password hashing with bcrypt
@@ -325,7 +246,15 @@ Phase 1 — Foundation is in progress. The backend service is implemented with J
 - `POST /api/v1/auth/refresh` — exchange a refresh token for a new token pair
 - `GET /api/v1/auth/me` — return the current authenticated user
 - Protected endpoints require a valid Bearer access token
-- Unit tests (10/10 passing)
+
+### Data Connectors (Phase 3)
+
+- Three-table event data model (`activities`, `events`, `metrics`) with RLS
+- `BaseConnector` abstract interface + connector registry
+- Ingestion API with deduplication
+- KOReader connector (reads `statistics.sqlite3`, groups page turns into reading sessions)
+- GitHub connector (fetches activity from GitHub Events API)
+- CLI runner: `python -m app.cli.run_connector <source>`
 
 ---
 
@@ -336,10 +265,13 @@ Phase 1 — Foundation is in progress. The backend service is implemented with J
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (Astral's Python package manager)
 - PostgreSQL database (or a Supabase project)
+- [Syncthing](https://syncthing.net/) (for KOReader data sync)
 
 ## Configuration
 
-The backend reads configuration from a `.env` file at the project root. Required variables:
+The backend reads configuration from a `.env` file at the project root.
+
+Required variables:
 
 | Variable | Description |
 | --- | --- |
@@ -354,6 +286,16 @@ Optional variables (with defaults):
 | `REFRESH_TOKEN_EXPIRE_DAYS` | 7 | Refresh token lifetime |
 | `JWT_ALGORITHM` | HS256 | JWT signing algorithm |
 | `LOG_LEVEL` | INFO | Application log level |
+
+Connector variables (see Setup sections below):
+
+| Variable | Description |
+| --- | --- |
+| `KOREADER_DB_PATH` | Path to KOReader `statistics.sqlite3` (synced via Syncthing) |
+| `GITHUB_TOKEN` | GitHub personal access token |
+| `GITHUB_USERNAME` | Your GitHub username |
+| `INGEST_EMAIL` | LifeOS user email (used by connector CLI to login) |
+| `INGEST_PASSWORD` | LifeOS user password (used by connector CLI to login) |
 
 ## Running the backend locally
 
@@ -392,7 +334,9 @@ cd backend
 uv run pytest -v
 ```
 
-## API endpoints
+---
+
+# API Endpoints
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
@@ -400,6 +344,10 @@ uv run pytest -v
 | POST | `/api/v1/auth/login` | No | Login, returns token pair |
 | POST | `/api/v1/auth/refresh` | No | Refresh access token |
 | GET | `/api/v1/auth/me` | Yes | Get current user |
+| POST | `/api/v1/events/ingest` | Yes | Ingest activities, events, metrics (batch) |
+| GET | `/api/v1/events/activities` | Yes | List activities (filter by source, category, since) |
+| GET | `/api/v1/events/events` | Yes | List events (filter by source, event_type, since) |
+| GET | `/api/v1/events/metrics` | Yes | List metrics (filter by source, metric_name, since) |
 
 ### Example: login
 
@@ -420,12 +368,208 @@ Response:
 }
 ```
 
-### Example: get current user
+### Example: ingest a reading session
 
 ```bash
-curl http://localhost:8000/api/v1/auth/me \
+curl -X POST http://localhost:8000/api/v1/events/ingest \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "records": [
+      {
+        "record_type": "activity",
+        "source": "koreader",
+        "category": "reading",
+        "title": "The Pragmatic Programmer",
+        "duration_minutes": 35,
+        "occurred_at": "2026-08-18T10:00:00Z",
+        "metadata": {"pages_read": 12}
+      }
+    ]
+  }'
+```
+
+Response:
+
+```json
+{
+  "ingested": 1,
+  "duplicates": 0
+}
+```
+
+### Example: query activities
+
+```bash
+curl "http://localhost:8000/api/v1/events/activities?source=koreader&limit=10" \
   -H "Authorization: Bearer <access_token>"
 ```
+
+---
+
+# Connectors
+
+## KOReader Connector
+
+### How it works
+
+KOReader stores reading statistics in a SQLite file called `statistics.sqlite3` inside the KOReader settings folder on your e-reader device. The connector reads this file, groups individual page-turn records into reading sessions (consecutive page turns within 10 minutes for the same book count as one session), and pushes them to the LifeOS ingestion API.
+
+### Setup (requires manual configuration)
+
+1. **Find the statistics file on your device**
+
+   The file is located inside the KOReader settings folder:
+
+   | Device | Path |
+   | --- | --- |
+   | Kobo | `.adds/koreader/settings/` |
+   | Kindle | `koreader/settings/` |
+   | Linux | `~/.local/share/koreader/` |
+
+   Look for `statistics.sqlite3`.
+
+2. **Install Syncthing on both devices**
+
+   - Install [Syncthing](https://syncthing.net/) on the machine running LifeOS backend.
+   - On your e-reader, use KOReader's built-in Syncthing plugin (available in KOReader app settings).
+   - Share the KOReader settings folder so `statistics.sqlite3` syncs to your backend machine automatically.
+
+3. **Set the file path in `.env`**
+
+   ```env
+   KOREADER_DB_PATH=/path/to/synced/statistics.sqlite3
+   ```
+
+4. **Create a LifeOS user for ingestion** (if you haven't already)
+
+   ```bash
+   cd backend
+   uv run python -m app.cli.create_user
+   ```
+
+   Then set the credentials in `.env`:
+
+   ```env
+   INGEST_EMAIL=your@email.com
+   INGEST_PASSWORD=yourpassword
+   ```
+
+5. **Run the connector**
+
+   ```bash
+   # Dry run — see what would be ingested
+   uv run python -m app.cli.run_connector koreader --dry-run
+
+   # Ingest last 24 hours
+   uv run python -m app.cli.run_connector koreader
+
+   # Ingest last 7 days
+   uv run python -m app.cli.run_connector koreader --since-hours 168
+   ```
+
+6. **(Optional) Automate with cron**
+
+   ```cron
+   0 * * * * cd /path/to/backend && uv run python -m app.cli.run_connector koreader --since-hours 1
+   ```
+
+---
+
+## GitHub Connector
+
+### How it works
+
+The connector calls the GitHub Events API to fetch your recent public activity (commits, pull requests, issues, reviews, etc.) and normalizes each event into a LifeOS event record.
+
+### Setup (requires manual configuration)
+
+1. **Create a GitHub personal access token**
+
+   - Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+   - Generate a new token (no scopes needed for public activity)
+   - Copy the token
+
+2. **Set credentials in `.env`**
+
+   ```env
+   GITHUB_TOKEN=ghp_your_token_here
+   GITHUB_USERNAME=your_github_username
+   INGEST_EMAIL=your@email.com
+   INGEST_PASSWORD=yourpassword
+   ```
+
+3. **Run the connector**
+
+   ```bash
+   # Dry run — see what would be ingested
+   uv run python -m app.cli.run_connector github --dry-run
+
+   # Ingest last 24 hours
+   uv run python -m app.cli.run_connector github
+
+   # Ingest last 7 days
+   uv run python -m app.cli.run_connector github --since-hours 168
+   ```
+
+4. **(Optional) Automate with cron**
+
+   ```cron
+   0 * * * * cd /path/to/backend && uv run python -m app.cli.run_connector github --since-hours 1
+   ```
+
+### GitHub event type mapping
+
+| GitHub Event | LifeOS event_type |
+| --- | --- |
+| PushEvent | commit |
+| PullRequestEvent | pull_request |
+| IssuesEvent | issue |
+| IssueCommentEvent | issue_comment |
+| PullRequestReviewEvent | code_review |
+| CreateEvent | branch_create |
+| WatchEvent | star |
+| Other | other |
+
+---
+
+# Roadmap
+
+## Phase 1 — Foundation (done)
+
+- Define LifeOS data model
+- Build backend service
+- Setup database
+- Docker deployment
+- Basic API
+- JWT authentication
+
+---
+
+## Phase 2 — Obsidian Integration
+
+- Obsidian plugin
+- Daily dashboard
+- Manual data entry
+- Habit tracking
+
+---
+
+## Phase 3 — Data Connectors (done)
+
+- KOReader connector
+- Reading analytics
+- GitHub connector
+- Ingestion API with deduplication
+
+---
+
+## Phase 4 — Personal Analytics
+
+- Weekly reports
+- Monthly reports
+- Productivity analysis
+- Personal insights
 
 ---
 
@@ -434,5 +578,3 @@ curl http://localhost:8000/api/v1/auth/me \
 LifeOS is not just a tracking application.
 
 The goal is to build a personal operating system that helps people understand, analyze, and improve the way they learn, work, and grow over time.
-
-```

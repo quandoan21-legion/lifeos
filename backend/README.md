@@ -36,7 +36,7 @@ Additional pool settings (optional):
 | `db_pool_size`     | 5       | Number of permanent connections      |
 | `db_max_overflow`  | 10      | Extra connections beyond pool size   |
 | `db_pool_recycle`  | 300     | Seconds before a connection is recycled |
-| `db_echo`           | False   | Echo SQL statements to logs           |
+| `db_echo`          | False   | Echo SQL statements to logs          |
 
 ### Architecture
 
@@ -46,8 +46,8 @@ The database layer lives in `app/database/`:
 | ----------------- | ------------------------------------------------------------ |
 | `connection.py`   | Sync and async engine creation + connection health checks    |
 | `session.py`      | Session factories and FastAPI dependency injection            |
-| `base.py`          | Declarative base + UUID and timestamp mixins                 |
-| `utils.py`         | `init_db()`, `drop_db()`, and table inspection helpers       |
+| `base.py`         | Declarative base + UUID and timestamp mixins                 |
+| `utils.py`        | `init_db()`, `drop_db()`, and table inspection helpers       |
 
 ### Using sessions in FastAPI routes
 
@@ -102,6 +102,107 @@ from app.database.utils import init_db_async
 await init_db_async()
 ```
 
+## Testing the database connection
+
+```bash
+uv run python test_db.py
+```
+
+---
+
+## Connectors
+
+Connectors collect data from external sources (KOReader, GitHub, etc.), normalize it, and push it to the LifeOS ingestion API.
+
+### Connector architecture
+
+```
+BaseConnector (abstract)
+├── KOReaderConnector  — reads statistics.sqlite3, groups page turns into sessions
+└── GitHubConnector    — fetches activity from GitHub Events API
+```
+
+Every connector implements three methods:
+
+| Method | Description |
+| --- | --- |
+| `authenticate()` | Validate access to the data source (file exists, API token valid) |
+| `fetch_raw(since)` | Fetch raw records since the given timestamp |
+| `normalize(raw)` | Convert raw records into LifeOS record dicts |
+
+The `run(since)` method chains all three: authenticate → fetch → normalize.
+
+### Connector registry
+
+Connectors self-register via the `@ConnectorRegistry.register("source_name")` decorator. To list available sources:
+
+```python
+from app.connectors import ConnectorRegistry
+
+print(ConnectorRegistry.list_sources())  # ['koreader', 'github']
+```
+
+### Running connectors
+
+Use the CLI runner:
+
+```bash
+# Dry run (print records without ingesting)
+uv run python -m app.cli.run_connector koreader --db-path /path/to/statistics.sqlite3 --dry-run
+uv run python -m app.cli.run_connector github --dry-run
+
+# Ingest last 24 hours
+uv run python -m app.cli.run_connector koreader
+uv run python -m app.cli.run_connector github
+
+# Ingest last 7 days
+uv run python -m app.cli.run_connector koreader --since-hours 168
+uv run python -m app.cli.run_connector github --since-hours 168
+```
+
+The CLI logs into the LifeOS API using `INGEST_EMAIL` / `INGEST_PASSWORD` from `.env`, then posts records to `POST /api/v1/events/ingest`.
+
+### Connector configuration
+
+Set these in the project root `.env`:
+
+| Variable | Description |
+| --- | --- |
+| `KOREADER_DB_PATH` | Path to KOReader `statistics.sqlite3` (synced via Syncthing) |
+| `GITHUB_TOKEN` | GitHub personal access token |
+| `GITHUB_USERNAME` | Your GitHub username |
+| `INGEST_EMAIL` | LifeOS user email (for connector CLI login) |
+| `INGEST_PASSWORD` | LifeOS user password (for connector CLI login) |
+
+### Adding a new connector
+
+1. Create `app/connectors/your_source.py`
+2. Subclass `BaseConnector`, set `source`, implement `authenticate`, `fetch_raw`, `normalize`
+3. Decorate with `@ConnectorRegistry.register("your_source")`
+4. Import the module in `app/connectors/__init__.py` to trigger registration
+
+Example:
+
+```python
+from app.connectors.base import BaseConnector
+from app.connectors.registry import ConnectorRegistry
+
+@ConnectorRegistry.register("my_source")
+class MyConnector(BaseConnector):
+    source = "my_source"
+
+    async def authenticate(self) -> None:
+        ...
+
+    async def fetch_raw(self, since=None) -> list[dict]:
+        ...
+
+    def normalize(self, raw: list[dict]) -> list[dict]:
+        ...
+```
+
+---
+
 ## Project structure
 
 ```
@@ -110,6 +211,17 @@ backend/
 │   ├── api/
 │   │   ├── middleware/
 │   │   └── v1/
+│   │       ├── auth.py
+│   │       ├── events.py
+│   │       └── router.py
+│   ├── cli/
+│   │   ├── create_user.py
+│   │   └── run_connector.py
+│   ├── connectors/
+│   │   ├── base.py
+│   │   ├── registry.py
+│   │   ├── koreader.py
+│   │   └── github.py
 │   ├── core/
 │   │   ├── config.py
 │   │   └── logging.py
@@ -119,14 +231,14 @@ backend/
 │   │   ├── session.py
 │   │   └── utils.py
 │   ├── models/
+│   │   ├── user.py
+│   │   ├── activity.py
+│   │   ├── event.py
+│   │   └── metric.py
 │   ├── schemas/
+│   │   ├── auth.py
+│   │   └── event.py
 │   ├── services/
 │   └── main.py
 └── pyproject.toml
-```
-
-## Testing the database connection
-
-```bash
-uv run python test_db.py
 ```
