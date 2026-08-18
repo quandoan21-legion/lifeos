@@ -256,6 +256,16 @@ All tables are owner-scoped via Row Level Security — each user can only see an
 - GitHub connector (fetches activity from GitHub Events API)
 - CLI runner: `python -m app.cli.run_connector <source>`
 
+### Personal Analytics (Phase 4)
+
+- Daily activity and event summaries
+- Streak tracking (current and best, per source+category)
+- Time-series trends (daily/weekly/monthly)
+- Source and category breakdowns with percentages
+- Event type counts with percentages
+- Metric aggregation (sum, avg, min, max, latest)
+- Combined dashboard endpoint (all data in one call)
+
 ---
 
 # Getting Started
@@ -348,6 +358,15 @@ uv run pytest -v
 | GET | `/api/v1/events/activities` | Yes | List activities (filter by source, category, since) |
 | GET | `/api/v1/events/events` | Yes | List events (filter by source, event_type, since) |
 | GET | `/api/v1/events/metrics` | Yes | List metrics (filter by source, metric_name, since) |
+| GET | `/api/v1/analytics/summary` | Yes | Daily activity summaries (duration, count, unique titles) |
+| GET | `/api/v1/analytics/events/summary` | Yes | Daily event count summaries |
+| GET | `/api/v1/analytics/streaks` | Yes | Current and best streaks (consecutive active days) |
+| GET | `/api/v1/analytics/trend` | Yes | Time-series trend (daily/weekly/monthly granularity) |
+| GET | `/api/v1/analytics/sources` | Yes | Activity duration breakdown by source |
+| GET | `/api/v1/analytics/categories` | Yes | Activity duration breakdown by category |
+| GET | `/api/v1/analytics/event-types` | Yes | Event count breakdown by event_type |
+| GET | `/api/v1/analytics/metrics` | Yes | Aggregated metric values (sum, avg, min, max, latest) |
+| GET | `/api/v1/analytics/dashboard` | Yes | Combined dashboard (all summaries, streaks, top items, recent events) |
 
 ### Example: login
 
@@ -402,6 +421,41 @@ Response:
 
 ```bash
 curl "http://localhost:8000/api/v1/events/activities?source=koreader&limit=10" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+### Example: get dashboard
+
+```bash
+curl "http://localhost:8000/api/v1/analytics/dashboard?days=7" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Response (abbreviated):
+
+```json
+{
+  "period_start": "2026-08-11",
+  "period_end": "2026-08-18",
+  "activities": [
+    {"period_start": "2026-08-18", "period_end": "2026-08-18", "total_duration_minutes": 45, "total_count": 2, "unique_titles": 1}
+  ],
+  "source_breakdown": [
+    {"source": "koreader", "total_duration_minutes": 45, "total_count": 2, "percentage": 100.0}
+  ],
+  "streaks": [
+    {"source": "koreader", "category": "reading", "current_streak": 3, "best_streak": 5, "last_active_date": "2026-08-18"}
+  ],
+  "top_activities": [
+    {"title": "The Pragmatic Programmer", "source": "koreader", "category": "reading", "total_duration_minutes": 120, "session_count": 3}
+  ]
+}
+```
+
+### Example: get reading trend (last 30 days, weekly)
+
+```bash
+curl "http://localhost:8000/api/v1/analytics/trend?days=30&granularity=weekly&source=koreader" \
   -H "Authorization: Bearer <access_token>"
 ```
 
@@ -564,12 +618,17 @@ The connector calls the GitHub Events API to fetch your recent public activity (
 
 ---
 
-## Phase 4 — Personal Analytics
+## Phase 4 — Personal Analytics (done)
 
-- Weekly reports
-- Monthly reports
-- Productivity analysis
-- Personal insights
+- Daily activity summaries (duration, count, unique titles per day)
+- Daily event count summaries
+- Streak tracking (current and best consecutive active days, per source+category)
+- Time-series trends (daily/weekly/monthly granularity, filterable by source/category)
+- Source breakdown (activity duration split by data source)
+- Category breakdown (activity duration split by category)
+- Event type counts (events grouped by type with percentages)
+- Metric aggregation (sum, avg, min, max, latest per metric name)
+- Combined dashboard endpoint (all summaries + streaks + top activities + recent events in one call)
 
 ---
 
