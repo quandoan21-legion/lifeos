@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 300
     db_echo: bool = False
 
+    KOREADER_DB_PATH: str | None = None
+    GITHUB_TOKEN: str | None = None
+    GITHUB_USERNAME: str | None = None
+
     model_config = SettingsConfigDict(env_file=str(_ENV_FILE), extra="ignore")
 
     @property
