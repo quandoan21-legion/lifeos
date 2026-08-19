@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     GITHUB_USERNAME: str | None = None
     OBSIDIAN_VAULT_PATH: str | None = None
 
+    SYNCTHING_URL: str = "http://localhost:8384"
+    SYNCTHING_API_KEY: str | None = None
+    SYNCTHING_FOLDER_ID: str | None = None
+
     ingest_email: str = ""
     ingest_password: str = ""
 

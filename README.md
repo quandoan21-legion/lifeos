@@ -379,6 +379,14 @@ KOREADER_DB_PATH=
 GITHUB_TOKEN=
 GITHUB_USERNAME=
 
+# Obsidian vault path
+OBSIDIAN_VAULT_PATH=
+
+# Syncthing Event API (for real-time vault sync, see Step 10.3)
+SYNCTHING_URL=http://localhost:8384
+SYNCTHING_API_KEY=
+SYNCTHING_FOLDER_ID=
+
 # Connector CLI — credentials used to login and ingest
 INGEST_EMAIL=
 INGEST_PASSWORD=
@@ -724,6 +732,83 @@ Fetches your recent public GitHub activity (commits, PRs, issues, reviews) via t
 
 ---
 
+### 10.3 Syncthing Vault Watcher (real-time Obsidian sync)
+
+#### What it does
+
+Listens to the Syncthing Event API in real-time. Whenever Syncthing finishes syncing a `.md` file from another device (e.g. your phone), the watcher immediately parses that file and pushes the extracted records to the ingestion API.
+
+This solves the problem where editing notes on your phone and syncing via Syncthing would not update the database — the watcher reacts to each file-sync event as it happens.
+
+#### Setup
+
+1. **Install Syncthing** on the machine running LifeOS backend and on your phone (e.g. via the Mobian Sync or Syncthing-Fork Android app).
+
+2. **Share your Obsidian vault folder** between both devices in Syncthing. Note the **Folder ID** (visible in the Syncthing Web UI).
+
+3. **Get your Syncthing API key:**
+   - Open the Syncthing Web UI (`http://localhost:8384`).
+   - Click **Actions** → **API Key**.
+   - Copy the key.
+
+4. **Set configuration in `.env`:**
+
+   ```env
+   OBSIDIAN_VAULT_PATH=/path/to/your/obsidian/vault
+   SYNCTHING_URL=http://localhost:8384
+   SYNCTHING_API_KEY=your-syncthing-api-key
+   SYNCTHING_FOLDER_ID=your-folder-id
+   INGEST_EMAIL=your@email.com
+   INGEST_PASSWORD=yourpassword
+   ```
+
+   > `SYNCTHING_FOLDER_ID` is optional — leave it empty to listen to all folders.
+
+5. **Test with a dry run (process current events and exit):**
+
+   ```bash
+   cd backend
+   uv run python -m app.cli.watch_syncthing --once --dry-run
+   ```
+
+6. **Run as a long-running service:**
+
+   ```bash
+   cd backend
+   uv run python -m app.cli.watch_syncthing
+   ```
+
+   The watcher polls the Syncthing Event API every 2 seconds. When a `.md` file finishes syncing, it is parsed and ingested immediately.
+
+7. **(Optional) Run as a systemd service:**
+
+   Create `/etc/systemd/system/lifeos-syncthing-watcher.service`:
+
+   ```ini
+   [Unit]
+   Description=LifeOS Syncthing Vault Watcher
+   After=network.target
+
+   [Service]
+   Type=simple
+   WorkingDirectory=/path/to/lifeos/backend
+   ExecStart=/path/to/uv run python -m app.cli.watch_syncthing
+   Restart=always
+   RestartSec=10
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   Then:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now lifeos-syncthing-watcher
+   ```
+
+---
+
 # Running with Docker
 
 If you prefer Docker over running the backend directly:
@@ -900,6 +985,7 @@ curl "http://localhost:8000/api/v1/analytics/trend?days=30&granularity=weekly&so
 ## Phase 2 — Obsidian Integration (partial)
 
 - Obsidian templates (done)
+- Syncthing vault watcher — real-time sync (done)
 - Obsidian plugin (planned)
 - Daily dashboard (planned)
 - Manual data entry (planned)

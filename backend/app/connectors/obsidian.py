@@ -78,6 +78,43 @@ class ObsidianConnector(BaseConnector):
                 results.append(records)
         return results
 
+    def parse_file(self, file_path: Path) -> list[dict[str, Any]]:
+        """Parse a single markdown file and return normalized records.
+
+        Used by the Syncthing watcher to process one file at a time
+        as soon as Syncthing reports it has finished syncing.
+        """
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return []
+
+        if self._template_folder in file_path.parts:
+            return []
+
+        frontmatter = self._parse_frontmatter(content)
+        if frontmatter is None:
+            return []
+        if any(
+            isinstance(v, str) and TEMPLATE_PLACEHOLDER in v
+            for v in frontmatter.values()
+        ):
+            return []
+
+        body = FRONTMATTER_RE.sub("", content)
+        frontmatter["_file_path"] = str(file_path.relative_to(self.vault_path))
+        frontmatter["_mtime"] = datetime.fromtimestamp(
+            file_path.stat().st_mtime, tz=timezone.utc
+        )
+        frontmatter["_body"] = body
+
+        records = self._convert(frontmatter)
+        if records is None:
+            return []
+        if isinstance(records, list):
+            return records
+        return [records]
+
     def _parse_frontmatter(self, content: str) -> dict[str, Any] | None:
         match = FRONTMATTER_RE.match(content)
         if match is None:
