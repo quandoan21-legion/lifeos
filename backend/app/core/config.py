@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     KOREADER_DB_PATH: str | None = None
     GITHUB_TOKEN: str | None = None
     GITHUB_USERNAME: str | None = None
+    OBSIDIAN_VAULT_PATH: str | None = None
 
     ingest_email: str = ""
     ingest_password: str = ""
