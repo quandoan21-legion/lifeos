@@ -1,6 +1,7 @@
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
+from decimal import Decimal
 from typing import Any
 
 import yaml
@@ -10,6 +11,11 @@ from app.connectors.registry import ConnectorRegistry
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n", re.DOTALL)
 TEMPLATE_PLACEHOLDER = "{{"
+TABLE_ROW_RE = re.compile(r"^\|(.+)\|\s*$")
+ENERGY_MOOD_RE = re.compile(
+    r"^-\s*(?:Energy|Mood|Sleep)\s*(?:\([^)]*\))?\s*:\s*(.+?)\s*$",
+    re.IGNORECASE,
+)
 
 
 @ConnectorRegistry.register("obsidian")
@@ -50,10 +56,12 @@ class ObsidianConnector(BaseConnector):
             ):
                 continue
 
+            body = FRONTMATTER_RE.sub("", content)
             frontmatter["_file_path"] = str(
                 md_file.relative_to(self.vault_path)
             )
             frontmatter["_mtime"] = mtime
+            frontmatter["_body"] = body
             records.append(frontmatter)
 
         return records
@@ -61,9 +69,13 @@ class ObsidianConnector(BaseConnector):
     def normalize(self, raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         for fm in raw:
-            record = self._convert(fm)
-            if record is not None:
-                results.append(record)
+            records = self._convert(fm)
+            if records is None:
+                continue
+            if isinstance(records, list):
+                results.extend(records)
+            else:
+                results.append(records)
         return results
 
     def _parse_frontmatter(self, content: str) -> dict[str, Any] | None:
@@ -78,7 +90,9 @@ class ObsidianConnector(BaseConnector):
         except yaml.YAMLError:
             return None
 
-    def _convert(self, fm: dict[str, Any]) -> dict[str, Any] | None:
+    def _convert(
+        self, fm: dict[str, Any]
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         record_type = fm.get("type", "")
 
         if record_type == "activity":
@@ -87,6 +101,8 @@ class ObsidianConnector(BaseConnector):
             return self._convert_reading(fm)
         elif record_type == "coding-session":
             return self._convert_coding(fm)
+        elif record_type == "daily":
+            return self._convert_daily(fm)
         return None
 
     def _convert_activity(self, fm: dict[str, Any]) -> dict[str, Any] | None:
@@ -158,6 +174,282 @@ class ObsidianConnector(BaseConnector):
             },
         }
 
+    def _convert_daily(self, fm: dict[str, Any]) -> list[dict[str, Any]]:
+        occurred_at = self._parse_datetime(fm.get("date"))
+        if occurred_at is None:
+            return []
+
+        body: str = fm.get("_body", "")
+        file_path = fm.get("_file_path")
+        tags = fm.get("tags", [])
+        records: list[dict[str, Any]] = []
+
+        records.extend(
+            self._parse_reading_table(body, occurred_at, file_path, tags)
+        )
+        records.extend(
+            self._parse_coding_table(body, occurred_at, file_path, tags)
+        )
+        records.extend(
+            self._parse_other_activities_table(
+                body, occurred_at, file_path, tags
+            )
+        )
+        records.extend(
+            self._parse_metrics_table(body, occurred_at, file_path, tags)
+        )
+        records.extend(
+            self._parse_energy_mood(body, occurred_at, file_path, tags)
+        )
+
+        return records
+
+    def _parse_reading_table(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows = self._extract_table(body, "Reading", ["Book", "Pages", "Duration"])
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            title = row.get("book", "").strip()
+            if not title:
+                continue
+            pages = self._parse_int(row.get("pages"))
+            duration_minutes = self._parse_duration(row.get("duration", ""))
+            records.append({
+                "record_type": "activity",
+                "source": "koreader",
+                "category": "reading",
+                "title": title,
+                "duration_minutes": duration_minutes,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "pages_read": pages,
+                    "notes": row.get("notes", "").strip() or None,
+                    "tags": tags,
+                },
+            })
+        return records
+
+    def _parse_coding_table(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows = self._extract_table(body, "Coding", ["Repo", "Type", "Count"])
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            repo = row.get("repo", "").strip()
+            if not repo:
+                continue
+            event_type = row.get("type", "").strip() or "other"
+            count = self._parse_int(row.get("count"))
+            records.append({
+                "record_type": "event",
+                "source": "github",
+                "event_type": event_type,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "repo": repo,
+                    "count": count,
+                    "notes": row.get("notes", "").strip() or None,
+                    "tags": tags,
+                },
+            })
+        return records
+
+    def _parse_other_activities_table(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows = self._extract_table(
+            body, "Other Activities", ["Activity", "Category", "Duration"]
+        )
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            title = row.get("activity", "").strip()
+            if not title:
+                continue
+            category = row.get("category", "").strip() or "general"
+            duration_minutes = self._parse_duration(row.get("duration", ""))
+            records.append({
+                "record_type": "activity",
+                "source": "manual",
+                "category": category,
+                "title": title,
+                "duration_minutes": duration_minutes,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "notes": row.get("notes", "").strip() or None,
+                    "tags": tags,
+                },
+            })
+        return records
+
+    def _parse_metrics_table(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows = self._extract_table(body, "Metrics", ["Metric", "Value", "Unit"])
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            name = row.get("metric", "").strip()
+            value_str = row.get("value", "").strip()
+            if not name or not value_str:
+                continue
+            try:
+                value = Decimal(value_str)
+            except Exception:
+                continue
+            unit = row.get("unit", "").strip() or "count"
+            records.append({
+                "record_type": "metric",
+                "source": "obsidian",
+                "metric_name": name,
+                "metric_value": value,
+                "unit": unit,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "notes": row.get("notes", "").strip() or None,
+                    "tags": tags,
+                },
+            })
+        return records
+
+    def _parse_energy_mood(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        in_section = False
+        for line in body.splitlines():
+            if line.strip().startswith("## Energy"):
+                in_section = True
+                continue
+            if in_section and line.strip().startswith("##"):
+                break
+            if not in_section:
+                continue
+            match = ENERGY_MOOD_RE.match(line.strip())
+            if match is None:
+                continue
+            label_raw = line.strip()
+            if label_raw.lower().startswith("- energy"):
+                name = "energy"
+                unit = "rating"
+            elif label_raw.lower().startswith("- mood"):
+                name = "mood"
+                unit = "rating"
+            elif label_raw.lower().startswith("- sleep"):
+                name = "sleep_hours"
+                unit = "hours"
+            else:
+                continue
+            value_str = match.group(1).strip()
+            try:
+                value = Decimal(value_str)
+            except Exception:
+                continue
+            records.append({
+                "record_type": "metric",
+                "source": "obsidian",
+                "metric_name": name,
+                "metric_value": value,
+                "unit": unit,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "tags": tags,
+                },
+            })
+        return records
+
+    @staticmethod
+    def _extract_table(
+        body: str,
+        section_hint: str,
+        expected_cols: list[str],
+    ) -> list[dict[str, str]]:
+        lines = body.splitlines()
+        start_idx: int | None = None
+        for i, line in enumerate(lines):
+            if section_hint.lower() in line.lower():
+                start_idx = i
+                break
+        if start_idx is None:
+            return []
+
+        for i in range(start_idx + 1, len(lines)):
+            if "|" not in lines[i]:
+                continue
+            header_line = lines[i]
+            if i + 1 < len(lines) and TABLE_ROW_RE.match(lines[i + 1]):
+                if TABLE_ROW_RE.match(header_line):
+                    headers = [
+                        c.strip().lower()
+                        for c in header_line.strip().strip("|").split("|")
+                    ]
+                    rows: list[dict[str, str]] = []
+                    for row_line in lines[i + 2 :]:
+                        if not TABLE_ROW_RE.match(row_line):
+                            break
+                        cells = [
+                            c.strip()
+                            for c in row_line.strip().strip("|").split("|")
+                        ]
+                        if len(cells) != len(headers):
+                            break
+                        rows.append(dict(zip(headers, cells)))
+                    return rows
+            break
+        return []
+
+    @staticmethod
+    def _parse_int(value: Any) -> int | None:
+        if value is None:
+            return None
+        s = str(value).strip()
+        if not s:
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_duration(value: str) -> int:
+        s = value.strip().lower()
+        if not s:
+            return 0
+        m = re.search(r"(\d+)\s*min", s)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"(\d+)\s*h(?:r|our)?", s)
+        if m:
+            return int(m.group(1)) * 60
+        try:
+            return int(s)
+        except ValueError:
+            return 0
+
     @staticmethod
     def _parse_datetime(value: Any) -> datetime | None:
         if value is None:
@@ -165,7 +457,9 @@ class ObsidianConnector(BaseConnector):
         if isinstance(value, datetime):
             return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
         if isinstance(value, date):
-            return datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc)
+            return datetime.combine(
+                value, datetime.min.time(), tzinfo=timezone.utc
+            )
         if isinstance(value, str):
             try:
                 dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
