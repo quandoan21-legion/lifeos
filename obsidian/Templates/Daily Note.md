@@ -31,11 +31,32 @@ tags: [daily, lifeos]
 |------|------|-------|-------|
 |      |      |       |       |
 
+### Exercise
+
+> One row per exercise. Weight in kg, leave empty for bodyweight.
+
+| Exercise | Sets | Reps | Weight (kg) | Notes |
+|----------|------|------|------------|-------|
+|          |      |      |            |       |
+
 ### Other Activities
 
 | Activity | Category | Duration | Notes |
 |----------|----------|----------|-------|
 |          |          |          |       |
+
+---
+
+## Body Metrics
+
+> Fill only what you measured today.
+
+| Metric | Value | Unit | Notes |
+|--------|-------|------|-------|
+| Weight |       | kg   |       |
+| Waist |       | cm   |       |
+| Body Fat |       | %    |       |
+| Steps |       | count |       |
 
 ---
 
@@ -52,6 +73,18 @@ tags: [daily, lifeos]
 - Energy (1-10):
 - Mood (1-10):
 - Sleep hours:
+
+---
+
+## Habits
+
+> Check the box if completed today.
+
+- [ ] Drink 2L water
+- [ ] Walk 10k steps
+- [ ] Meditate
+- [ ] Read 30 min
+- [ ] No sugar
 
 ---
 

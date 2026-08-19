@@ -14,9 +14,11 @@ tags: [weekly, review, lifeos]
 | Total reading (min) | | | |
 | Total coding (min) | | | |
 | Total activities (min) | | | |
+| Total exercise (min) | | | |
 | Active days | | | |
 | GitHub commits | | | |
 | Pages read | | | |
+| Workouts | | | |
 
 ---
 
@@ -36,6 +38,23 @@ tags: [weekly, review, lifeos]
 | coding | | | |
 | writing | | | |
 | exercise | | | |
+
+---
+
+## Exercise Summary
+
+| Workout Type | Sessions | Total Duration (min) | Top Exercise |
+|--------------|----------|----------------------|-------------|
+|              |          |                      |             |
+
+## Body Metrics Trend
+
+| Metric | This Week | Last Week | Change |
+|--------|-----------|-----------|--------|
+| Weight (kg) | | | |
+| Waist (cm) | | | |
+| Body Fat (%) | | | |
+| Steps (avg/day) | | | |
 
 ---
 

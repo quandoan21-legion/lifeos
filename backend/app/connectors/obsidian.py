@@ -79,11 +79,7 @@ class ObsidianConnector(BaseConnector):
         return results
 
     def parse_file(self, file_path: Path) -> list[dict[str, Any]]:
-        """Parse a single markdown file and return normalized records.
-
-        Used by the Syncthing watcher to process one file at a time
-        as soon as Syncthing reports it has finished syncing.
-        """
+        """Parse a single markdown file and return normalized records."""
         try:
             content = file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -102,7 +98,9 @@ class ObsidianConnector(BaseConnector):
             return []
 
         body = FRONTMATTER_RE.sub("", content)
-        frontmatter["_file_path"] = str(file_path.relative_to(self.vault_path))
+        frontmatter["_file_path"] = str(
+            file_path.relative_to(self.vault_path)
+        )
         frontmatter["_mtime"] = datetime.fromtimestamp(
             file_path.stat().st_mtime, tz=timezone.utc
         )
@@ -138,6 +136,10 @@ class ObsidianConnector(BaseConnector):
             return self._convert_reading(fm)
         elif record_type == "coding-session":
             return self._convert_coding(fm)
+        elif record_type == "workout-session":
+            return self._convert_workout(fm)
+        elif record_type == "body-metrics":
+            return self._convert_body_metrics(fm)
         elif record_type == "daily":
             return self._convert_daily(fm)
         return None
@@ -211,6 +213,198 @@ class ObsidianConnector(BaseConnector):
             },
         }
 
+    def _convert_workout(
+        self, fm: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        occurred_at = self._parse_datetime(
+            fm.get("occurred_at") or fm.get("date")
+        )
+        if occurred_at is None:
+            return []
+
+        body: str = fm.get("_body", "")
+        file_path = fm.get("_file_path")
+        tags = fm.get("tags", [])
+        title = fm.get("title", "Workout")
+        workout_type = fm.get("workout_type", "general")
+        duration_minutes = int(fm.get("duration_minutes", 0) or 0)
+
+        records: list[dict[str, Any]] = []
+
+        records.append({
+            "record_type": "activity",
+            "source": "manual",
+            "category": "exercise",
+            "title": title,
+            "duration_minutes": duration_minutes,
+            "occurred_at": occurred_at,
+            "metadata": {
+                "file_path": file_path,
+                "workout_type": workout_type,
+                "tags": tags,
+            },
+        })
+
+        strength_rows = self._extract_table(
+            body, "Strength Exercises",
+            ["Exercise", "Sets", "Reps", "Weight (kg)", "Notes"],
+        )
+        for row in strength_rows:
+            exercise = row.get("exercise", "").strip()
+            if not exercise:
+                continue
+            sets = self._parse_int(row.get("sets"))
+            reps = self._parse_int(row.get("reps"))
+            weight = self._parse_decimal(row.get("weight (kg)"))
+
+            if sets is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{exercise} sets",
+                    "metric_value": Decimal(sets),
+                    "unit": "count",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "exercise": exercise,
+                        "reps": reps,
+                        "weight_kg": weight,
+                        "tags": tags,
+                    },
+                })
+            if reps is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{exercise} reps",
+                    "metric_value": Decimal(reps),
+                    "unit": "count",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "exercise": exercise,
+                        "sets": sets,
+                        "weight_kg": weight,
+                        "tags": tags,
+                    },
+                })
+            if weight is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{exercise} weight",
+                    "metric_value": weight,
+                    "unit": "kg",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "exercise": exercise,
+                        "sets": sets,
+                        "reps": reps,
+                        "tags": tags,
+                    },
+                })
+
+        cardio_rows = self._extract_table(
+            body, "Cardio",
+            ["Activity", "Distance (km)", "Duration (min)", "Avg Heart Rate", "Notes"],
+        )
+        for row in cardio_rows:
+            activity = row.get("activity", "").strip()
+            if not activity:
+                continue
+            distance = self._parse_decimal(row.get("distance (km)"))
+            duration = self._parse_int(row.get("duration (min)"))
+            hr = self._parse_int(row.get("avg heart rate"))
+
+            if distance is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{activity} distance",
+                    "metric_value": distance,
+                    "unit": "km",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "tags": tags,
+                    },
+                })
+            if duration is not None:
+                records.append({
+                    "record_type": "activity",
+                    "source": "manual",
+                    "category": "exercise",
+                    "title": activity,
+                    "duration_minutes": duration,
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "distance_km": distance,
+                        "avg_hr": hr,
+                        "tags": tags,
+                    },
+                })
+            if hr is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{activity} avg_hr",
+                    "metric_value": Decimal(hr),
+                    "unit": "bpm",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "tags": tags,
+                    },
+                })
+
+        return records
+
+    def _convert_body_metrics(
+        self, fm: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        occurred_at = self._parse_datetime(fm.get("date"))
+        if occurred_at is None:
+            return []
+
+        body: str = fm.get("_body", "")
+        file_path = fm.get("_file_path")
+        tags = fm.get("tags", [])
+
+        rows = self._extract_table(
+            body, "Measurements",
+            ["Metric", "Value", "Unit", "Notes"],
+        )
+
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            name = row.get("metric", "").strip()
+            value_str = row.get("value", "").strip()
+            if not name or not value_str:
+                continue
+            try:
+                value = Decimal(value_str)
+            except Exception:
+                continue
+            unit = row.get("unit", "").strip() or "count"
+            records.append({
+                "record_type": "metric",
+                "source": "obsidian",
+                "metric_name": name.lower().replace(" ", "_"),
+                "metric_value": value,
+                "unit": unit,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "notes": row.get("notes", "").strip() or None,
+                    "tags": tags,
+                },
+            })
+
+        return records
+
     def _convert_daily(self, fm: dict[str, Any]) -> list[dict[str, Any]]:
         occurred_at = self._parse_datetime(fm.get("date"))
         if occurred_at is None:
@@ -228,15 +422,24 @@ class ObsidianConnector(BaseConnector):
             self._parse_coding_table(body, occurred_at, file_path, tags)
         )
         records.extend(
+            self._parse_exercise_table(body, occurred_at, file_path, tags)
+        )
+        records.extend(
             self._parse_other_activities_table(
                 body, occurred_at, file_path, tags
             )
+        )
+        records.extend(
+            self._parse_body_metrics_table(body, occurred_at, file_path, tags)
         )
         records.extend(
             self._parse_metrics_table(body, occurred_at, file_path, tags)
         )
         records.extend(
             self._parse_energy_mood(body, occurred_at, file_path, tags)
+        )
+        records.extend(
+            self._parse_habits(body, occurred_at, file_path, tags)
         )
 
         return records
@@ -302,6 +505,76 @@ class ObsidianConnector(BaseConnector):
             })
         return records
 
+    def _parse_exercise_table(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows = self._extract_table(
+            body, "Exercise",
+            ["Exercise", "Sets", "Reps", "Weight (kg)", "Notes"],
+        )
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            exercise = row.get("exercise", "").strip()
+            if not exercise:
+                continue
+            sets = self._parse_int(row.get("sets"))
+            reps = self._parse_int(row.get("reps"))
+            weight = self._parse_decimal(row.get("weight (kg)"))
+
+            if sets is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{exercise} sets",
+                    "metric_value": Decimal(sets),
+                    "unit": "count",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "exercise": exercise,
+                        "reps": reps,
+                        "weight_kg": weight,
+                        "tags": tags,
+                    },
+                })
+            if reps is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{exercise} reps",
+                    "metric_value": Decimal(reps),
+                    "unit": "count",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "exercise": exercise,
+                        "sets": sets,
+                        "weight_kg": weight,
+                        "tags": tags,
+                    },
+                })
+            if weight is not None:
+                records.append({
+                    "record_type": "metric",
+                    "source": "obsidian",
+                    "metric_name": f"{exercise} weight",
+                    "metric_value": weight,
+                    "unit": "kg",
+                    "occurred_at": occurred_at,
+                    "metadata": {
+                        "file_path": file_path,
+                        "exercise": exercise,
+                        "sets": sets,
+                        "reps": reps,
+                        "tags": tags,
+                    },
+                })
+        return records
+
     def _parse_other_activities_table(
         self,
         body: str,
@@ -329,6 +602,42 @@ class ObsidianConnector(BaseConnector):
                 "metadata": {
                     "file_path": file_path,
                     "notes": row.get("notes", "").strip() or None,
+                    "tags": tags,
+                },
+            })
+        return records
+
+    def _parse_body_metrics_table(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        rows = self._extract_table(
+            body, "Body Metrics",
+            ["Metric", "Value", "Unit"],
+        )
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            name = row.get("metric", "").strip()
+            value_str = row.get("value", "").strip()
+            if not name or not value_str:
+                continue
+            try:
+                value = Decimal(value_str)
+            except Exception:
+                continue
+            unit = row.get("unit", "").strip() or "count"
+            records.append({
+                "record_type": "metric",
+                "source": "obsidian",
+                "metric_name": name.lower().replace(" ", "_"),
+                "metric_value": value,
+                "unit": unit,
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
                     "tags": tags,
                 },
             })
@@ -419,6 +728,46 @@ class ObsidianConnector(BaseConnector):
             })
         return records
 
+    def _parse_habits(
+        self,
+        body: str,
+        occurred_at: datetime,
+        file_path: str | None,
+        tags: list[Any],
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        in_section = False
+        for line in body.splitlines():
+            if line.strip().startswith("## Habits"):
+                in_section = True
+                continue
+            if in_section and line.strip().startswith("##"):
+                break
+            if not in_section:
+                continue
+            stripped = line.strip()
+            if not stripped.startswith("- ["):
+                continue
+            checked = stripped.startswith("- [x]") or stripped.startswith("- [X]")
+            habit_name = re.sub(r"^\-\s*\[[xX ]\]\s*", "", stripped).strip()
+            if not habit_name:
+                continue
+            records.append({
+                "record_type": "metric",
+                "source": "obsidian",
+                "metric_name": f"habit_{habit_name.lower().replace(' ', '_')}",
+                "metric_value": Decimal(1) if checked else Decimal(0),
+                "unit": "bool",
+                "occurred_at": occurred_at,
+                "metadata": {
+                    "file_path": file_path,
+                    "habit": habit_name,
+                    "completed": checked,
+                    "tags": tags,
+                },
+            })
+        return records
+
     @staticmethod
     def _extract_table(
         body: str,
@@ -469,6 +818,18 @@ class ObsidianConnector(BaseConnector):
         try:
             return int(s)
         except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_decimal(value: Any) -> Decimal | None:
+        if value is None:
+            return None
+        s = str(value).strip()
+        if not s:
+            return None
+        try:
+            return Decimal(s)
+        except Exception:
             return None
 
     @staticmethod

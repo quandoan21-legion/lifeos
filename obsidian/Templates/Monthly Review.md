@@ -16,6 +16,8 @@ tags: [monthly, review, lifeos]
 | Total pages read | | | |
 | GitHub commits | | | |
 | GitHub PRs | | | |
+| Total workouts | | | |
+| Total exercise (min) | | | |
 | Longest streak | | | |
 
 ---
@@ -36,6 +38,23 @@ tags: [monthly, review, lifeos]
 | coding | | | |
 | writing | | | |
 | exercise | | | |
+
+---
+
+## Exercise Summary
+
+| Workout Type | Sessions | Total Duration (min) | Top Exercise |
+|--------------|----------|----------------------|-------------|
+|              |          |                      |             |
+
+## Body Metrics Trend
+
+| Metric | Start of Month | End of Month | Change |
+|--------|---------------|--------------|--------|
+| Weight (kg) | | | |
+| Waist (cm) | | | |
+| Body Fat (%) | | | |
+| Steps (avg/day) | | | |
 
 ---
 
