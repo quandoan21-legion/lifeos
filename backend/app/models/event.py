@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,5 +23,5 @@ class Event(Base, UUIDMixin, TimestampMixin):
         DateTime(timezone=True), nullable=False, index=True
     )
     metadata_: Mapped[dict] = mapped_column(
-        "metadata", JSONB, nullable=False, server_default=func.cast("{}", JSONB)
+        "metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
